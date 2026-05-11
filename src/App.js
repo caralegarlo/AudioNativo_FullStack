@@ -1,154 +1,410 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import './App.css';
 
-// --- 1. COMPONENTE DE LA GALERÍA (Universal) ---
-function GaleriaSonidos() {
-    const [sonidos, setSonidos] = useState([]);
-
-    useEffect(() => {
-        const obtenerSonidos = async () => {
-            try {
-                const res = await axios.get('http://127.0.0.1:8000/api/sonidos');
-                setSonidos(res.data);
-            } catch (err) {
-                console.error("Error al cargar la audioteca:", err);
-            }
-        };
-        obtenerSonidos();
-    }, []);
-
-    return (
-        <div style={{ marginTop: '30px' }}>
-            <h2 style={{ color: '#2c3e50', borderBottom: '2px solid #3498db', display: 'inline-block' }}> Audioteca Colombiana</h2>
-            <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
-                gap: '20px', 
-                marginTop: '20px' 
-            }}>
-                {sonidos.length > 0 ? sonidos.map(sonido => (
-                    <div key={sonido.id} style={{ 
-                        background: 'white', 
-                        padding: '20px', 
-                        borderRadius: '12px', 
-                        boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
-                        textAlign: 'left'
-                    }}>
-                        <h4 style={{ margin: '0 0 10px 0', color: '#1a1a1a' }}>{sonido.nombre}</h4>
-                        <span style={{ background: '#e1f5fe', color: '#01579b', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem' }}>
-                            {sonido.categoria}
-                        </span>
-                        <p style={{ fontSize: '0.9rem', color: '#666', margin: '15px 0' }}>{sonido.descripcion}</p>
-                        <audio controls style={{ width: '100%', height: '35px' }}>
-                            <source src={`http://127.0.0.1:8000/${sonido.ruta_archivo}`} type="audio/mpeg" />
-                            Tu navegador no soporta el reproductor.
-                        </audio>
-                    </div>
-                )) : <p>No hay sonidos registrados aún.</p>}
-            </div>
-        </div>
-    );
+// =============================================
+// SIDEBAR (usuarios no admin)
+// =============================================
+function Sidebar({ setPagina, paginaActiva, setUsuario }) {
+  return (
+    <div className="sidebar">
+      <div className="sidebar-logo">AudioNativo</div>
+      <button
+        className={`sidebar-btn ${paginaActiva === 'inicio' ? 'active' : ''}`}
+        onClick={() => setPagina('inicio')}
+      >
+        Inicio
+      </button>
+      <button
+        className={`sidebar-btn ${paginaActiva === 'sonidos' ? 'active' : ''}`}
+        onClick={() => setPagina('sonidos')}
+      >
+        Sonidos
+      </button>
+      <button
+        className={`sidebar-btn ${paginaActiva === 'acerca' ? 'active' : ''}`}
+        onClick={() => setPagina('acerca')}
+      >
+        Acerca de
+      </button>
+      <div className="sidebar-logout">
+        <button onClick={() => setUsuario(null)}>Cerrar Sesión</button>
+      </div>
+    </div>
+  );
 }
 
-// COMPONENTE DEL PANEL DE ADMIN (Solo para carga)
-function AdminPanel() {
-    const [formData, setFormData] = useState({
-        nombre: '', categoria: 'Ambiente', subcategoria: '', descripcion: ''
+// =============================================
+// INICIO (búsqueda en vivo + orden)
+// =============================================
+function Inicio() {
+  const [busqueda, setBusqueda] = useState('');
+  const [todosSonidos, setTodosSonidos] = useState([]);
+  const [orden, setOrden] = useState('reciente');
+
+  useEffect(() => {
+    axios.get('http://127.0.0.1:8000/api/sonidos')
+      .then(res => setTodosSonidos(res.data))
+      .catch(err => console.error(err));
+  }, []);
+
+  const sonidosFiltrados = todosSonidos
+    .filter(s => {
+      if (!busqueda.trim()) return false; // ← No mostrar nada si no hay búsqueda
+      const termino = busqueda.toLowerCase();
+      return (
+        s.nombre.toLowerCase().includes(termino) ||
+        s.categoria.toLowerCase().includes(termino) ||
+        (s.subcategoria && s.subcategoria.toLowerCase().includes(termino)) ||
+        (s.descripcion && s.descripcion.toLowerCase().includes(termino))
+      );
+    })
+    .sort((a, b) => {
+      if (orden === 'reciente') return b.id - a.id;
+      if (orden === 'az') return a.nombre.localeCompare(b.nombre);
+      if (orden === 'za') return b.nombre.localeCompare(a.nombre);
+      return 0;
     });
-    const [archivo, setArchivo] = useState(null);
 
-    const enviar = async (e) => {
-        e.preventDefault();
-        const data = new FormData();
-        data.append('nombre', formData.nombre);
-        data.append('categoria', formData.categoria);
-        data.append('subcategoria', formData.subcategoria);
-        data.append('descripcion', formData.descripcion);
-        data.append('archivo', archivo);
+  return (
+    <div>
+      <h2>Explora la Audioteca</h2>
+      <div className="search-bar">
+        <input
+          type="text"
+          className="search-input search-input-grande"
+          placeholder="Buscar en toda la Audioteca (ej: ave, lluvia, FX...)"
+          value={busqueda}
+          onChange={e => setBusqueda(e.target.value)}
+        />
+        <select className="sort-select" value={orden} onChange={e => setOrden(e.target.value)}>
+          <option value="reciente">Más reciente</option>
+          <option value="az">A – Z</option>
+          <option value="za">Z – A</option>
+        </select>
+      </div>
 
-        try {
-            await axios.post('http://127.0.0.1:8000/api/subir-sonido', data);
-            alert("✅ ¡Sonido publicado con éxito!");
-            window.location.reload();
-        } catch (err) {
-            alert("❌ Error en la base de datos o servidor");
-        }
-    };
+      {busqueda.trim() && (
+        <p className="results-count">
+          {sonidosFiltrados.length} resultado(s) para "{busqueda}"
+        </p>
+      )}
 
-    return (
-        <div style={{ background: '#f8f9fa', padding: '25px', borderRadius: '15px', border: '1px solid #dee2e6' }}>
-            <h3 style={{ marginTop: 0 }}>🛠️ Panel de Gestión (Admin)</h3>
-            <form onSubmit={enviar} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <input placeholder="Nombre (ej: Tórtola Común)" style={{ padding: '10px' }} onChange={e => setFormData({...formData, nombre: e.target.value})} required />
-                <div style={{ display: 'flex', gap: '10px' }}>
-                    <select style={{ flex: 1, padding: '10px' }} onChange={e => setFormData({...formData, categoria: e.target.value})}>
-                        <option value="Ambiente">Ambiente</option>
-                        <option value="FX">FX (Bioacústica)</option>
-                        <option value="Foley">Foley</option>
-                    </select>
-                    <input style={{ flex: 1, padding: '10px' }} placeholder="Subcategoría" onChange={e => setFormData({...formData, subcategoria: e.target.value})} />
-                </div>
-                <textarea style={{ padding: '10px' }} placeholder="Descripción del hábitat o técnica..." onChange={e => setFormData({...formData, descripcion: e.target.value})} />
-                <input type="file" accept="audio/*" onChange={e => setArchivo(e.target.files[0])} required />
-                <button type="submit" style={{ background: '#27ae60', color: 'white', border: 'none', padding: '12px', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>
-                    Subir a la Audioteca
-                </button>
-            </form>
+      {sonidosFiltrados.length > 0 ? (
+        <div className="tarjetas-container">
+          {sonidosFiltrados.map(s => <TarjetaSonido key={s.id} sonido={s} />)}
         </div>
-    );
+      ) : busqueda.trim() ? (
+        <p>No se encontraron sonidos. Prueba con otro término.</p>
+      ) : null}
+      {/* Si no hay búsqueda, no se muestra absolutamente nada */}
+    </div>
+  );
 }
 
-// --- 3. COMPONENTE PRINCIPAL (Lógica de Roles) ---
-function App() {
-    const [credenciales, setCredenciales] = useState({ email: '', password: '' });
-    const [usuario, setUsuario] = useState(null);
+// =============================================
+// TARJETA DE SONIDO
+// =============================================
+function TarjetaSonido({ sonido }) {
+  return (
+    <div className="tarjeta-sonido">
+      <h4>{sonido.nombre}</h4>
+      <p><strong>Categoría:</strong> {sonido.categoria}</p>
+      {sonido.subcategoria && <p><strong>Sub:</strong> {sonido.subcategoria}</p>}
+      <p style={{ fontSize: '14px' }}>{sonido.descripcion}</p>
+      <audio controls>
+        <source src={`http://127.0.0.1:8000/${sonido.ruta_archivo}`} type="audio/mpeg" />
+        Tu navegador no soporta el audio.
+      </audio>
+    </div>
+  );
+}
 
-    const handleLogin = async (e) => {
-        e.preventDefault();
-        const data = new FormData();
-        data.append('email', credenciales.email);
-        data.append('password', credenciales.password);
+// =============================================
+// SONIDOS (categorías + orden)
+// =============================================
+function Sonidos() {
+  const [categoria, setCategoria] = useState(null); // null = sin selección, 'todas' = todas
+  const [todosSonidos, setTodosSonidos] = useState([]);
+  const [orden, setOrden] = useState('reciente');
+  const categorias = ['Ambiente', 'FX', 'Foley'];
 
-        try {
-            const res = await axios.post('http://127.0.0.1:8000/api/login', data);
-            setUsuario(res.data);
-        } catch (err) {
-            alert("Credenciales incorrectas");
-        }
-    };
+  useEffect(() => {
+    axios.get('http://127.0.0.1:8000/api/sonidos')
+      .then(res => setTodosSonidos(res.data))
+      .catch(err => console.error(err));
+  }, []);
 
-    return (
-        <div style={{ maxWidth: '1100px', margin: 'auto', padding: '40px', fontFamily: 'Arial, sans-serif' }}>
-            {!usuario ? (
-                <div style={{ width: '300px', margin: '100px auto', textAlign: 'center' }}>
-                    <h2>AudioNativo Login</h2>
-                    <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                        <input type="email" placeholder="Email" style={{ padding: '10px' }} onChange={e => setCredenciales({...credenciales, email: e.target.value})} required />
-                        <input type="password" placeholder="Password" style={{ padding: '10px' }} onChange={e => setCredenciales({...credenciales, password: e.target.value})} required />
-                        <button style={{ padding: '10px', background: '#3498db', color: 'white', border: 'none', borderRadius: '5px' }}>Entrar</button>
-                    </form>
-                </div>
-            ) : (
-                <div>
-                    <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-                        <div>
-                            <h1>AudioNativo</h1>
-                            <p>Bienvenido, <strong>{usuario.nombre}</strong> (Rol: {usuario.rol})</p>
-                        </div>
-                        <button onClick={() => setUsuario(null)} style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '5px', cursor: 'pointer' }}>
-                            Cerrar Sesión
-                        </button>
-                    </header>
+  // Sin categoría seleccionada → sin resultados
+  const sonidosFiltrados = todosSonidos
+    .filter(s => {
+      if (!categoria) return false;            // aún no elige
+      if (categoria === 'todas') return true;  // mostrar todas
+      return s.categoria === categoria;        // categoría específica
+    })
+    .sort((a, b) => {
+      if (orden === 'reciente') return b.id - a.id;
+      if (orden === 'az') return a.nombre.localeCompare(b.nombre);
+      if (orden === 'za') return b.nombre.localeCompare(a.nombre);
+      return 0;
+    });
 
-                    {/* MOSTRAR PANEL SOLO SI ES ADMIN */}
-                    {usuario.rol === 'admin' && <AdminPanel />}
+  return (
+    <div>
+      <h2>Sonidos por Categoría</h2>
+      <div className="categorias-btns">
+        {categorias.map(cat => (
+          <button
+            key={cat}
+            className={`cat-btn ${categoria === cat ? 'active-cat' : ''}`}
+            onClick={() => setCategoria(cat)}
+          >
+            {cat}
+          </button>
+        ))}
+        {categoria && (
+          <button className="clear-cat-btn" onClick={() => setCategoria('todas')}>
+            Mostrar todas
+          </button>
+        )}
+      </div>
 
-                    {/* MOSTRAR GALERÍA PARA TODOS */}
-                    <GaleriaSonidos />
-                </div>
-            )}
+      {/* Mensaje inicial cuando no hay categoría seleccionada */}
+      {!categoria && (
+        <p className="categoria-prompt">
+          Selecciona la categoría que desees para encontrar la variedad sonora que hay.
+        </p>
+      )}
+
+      {categoria && categoria !== 'todas' && <h3>{categoria} ({sonidosFiltrados.length})</h3>}
+      {categoria === 'todas' && <h3>Todas las categorías ({sonidosFiltrados.length})</h3>}
+
+      <div className="sort-wrapper">
+        <label>Ordenar: </label>
+        <select className="sort-select" value={orden} onChange={e => setOrden(e.target.value)}>
+          <option value="reciente">Más reciente</option>
+          <option value="az">A – Z</option>
+          <option value="za">Z – A</option>
+        </select>
+      </div>
+
+      {categoria && sonidosFiltrados.length > 0 ? (
+        <div className="tarjetas-container">
+          {sonidosFiltrados.map(s => <TarjetaSonido key={s.id} sonido={s} />)}
         </div>
+      ) : categoria && (
+        <p>No hay sonidos en esta categoría.</p>
+      )}
+    </div>
+  );
+}
+
+// =============================================
+// ACERCA DE
+// =============================================
+function AcercaDe() {
+  return (
+    <div className="acerca-de">
+      <h2>Acerca de AudioNativo</h2>
+      <p>Plataforma para centralizar, preservar y gestionar paisajes sonoros, fauna y Foley de Colombia.</p>
+      <p>Orientada a creadores audiovisuales y académicos.</p>
+    </div>
+  );
+}
+
+// =============================================
+// PANEL DE ADMINISTRACIÓN
+// =============================================
+function PanelAdministracion({ setUsuario }) {
+  const [formData, setFormData] = useState({ nombre: '', categoria: 'Ambiente', subcategoria: '', descripcion: '' });
+  const [archivo, setArchivo] = useState(null);
+  const [sonidos, setSonidos] = useState([]);
+  const [filtroCategoria, setFiltroCategoria] = useState('todas');
+  const [orden, setOrden] = useState('reciente');
+
+  useEffect(() => {
+    cargarSonidos();
+  }, []);
+
+  const cargarSonidos = () => {
+    axios.get('http://127.0.0.1:8000/api/sonidos')
+      .then(res => setSonidos(res.data))
+      .catch(err => console.error(err));
+  };
+
+  const enviar = async (e) => {
+    e.preventDefault();
+    const data = new FormData();
+    data.append('nombre', formData.nombre);
+    data.append('categoria', formData.categoria);
+    data.append('subcategoria', formData.subcategoria);
+    data.append('descripcion', formData.descripcion);
+    data.append('archivo', archivo);
+    try {
+      await axios.post('http://127.0.0.1:8000/api/subir-sonido', data);
+      alert("✅ Sonido subido exitosamente");
+      setFormData({ nombre: '', categoria: 'Ambiente', subcategoria: '', descripcion: '' });
+      setArchivo(null);
+      cargarSonidos();
+    } catch (err) {
+      console.error(err);
+      alert("❌ Error al subir archivo");
+    }
+  };
+
+  // Filtrado y orden
+  let sonidosFiltrados = [...sonidos];
+  if (filtroCategoria !== 'todas') {
+    sonidosFiltrados = sonidosFiltrados.filter(s => s.categoria === filtroCategoria);
+  }
+  sonidosFiltrados.sort((a, b) => {
+    if (orden === 'reciente') return b.id - a.id;
+    if (orden === 'az') return a.nombre.localeCompare(b.nombre);
+    if (orden === 'za') return b.nombre.localeCompare(a.nombre);
+    return 0;
+  });
+
+  return (
+    <div className="admin-container">
+      <div className="admin-header">
+        <h2>Panel de Administración</h2>
+        <button className="admin-logout-btn" onClick={() => setUsuario(null)}>Cerrar Sesión</button>
+      </div>
+
+      {/* Formulario de subida */}
+      <form className="upload-form" onSubmit={enviar}>
+        <h3>🛠️ Subir Nuevo Sonido</h3>
+        <input placeholder="Nombre del Sonido" value={formData.nombre}
+          onChange={e => setFormData({...formData, nombre: e.target.value})} required />
+        <select value={formData.categoria}
+          onChange={e => setFormData({...formData, categoria: e.target.value})}>
+          <option value="Ambiente">Ambiente</option>
+          <option value="FX">FX (Bioacústica)</option>
+          <option value="Foley">Foley</option>
+        </select>
+        <input placeholder="Subcategoría (ej: Aves)" value={formData.subcategoria}
+          onChange={e => setFormData({...formData, subcategoria: e.target.value})} />
+        <textarea placeholder="Descripción técnica detallada..." value={formData.descripcion}
+          onChange={e => setFormData({...formData, descripcion: e.target.value})} />
+        <label>Selecciona el audio (MP3/WAV):</label>
+        <input type="file" accept="audio/*" onChange={e => setArchivo(e.target.files[0])} required />
+        <button type="submit" className="upload-btn">Publicar en AudioNativo</button>
+      </form>
+
+      {/* Gestión de sonidos */}
+      <div>
+        <h3>📂 Audios en la Audioteca ({sonidosFiltrados.length})</h3>
+        <div className="admin-filters">
+          <div>
+            <label>Filtrar por categoría:</label>
+            <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)}>
+              <option value="todas">Todas</option>
+              <option value="Ambiente">Ambiente</option>
+              <option value="FX">FX</option>
+              <option value="Foley">Foley</option>
+            </select>
+          </div>
+          <div>
+            <label>Ordenar:</label>
+            <select value={orden} onChange={e => setOrden(e.target.value)}>
+              <option value="reciente">Más reciente</option>
+              <option value="az">A – Z</option>
+              <option value="za">Z – A</option>
+            </select>
+          </div>
+        </div>
+
+        {sonidosFiltrados.length === 0 ? (
+          <p>No hay sonidos con ese filtro.</p>
+        ) : (
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Categoría</th>
+                <th>Subcategoría</th>
+                <th>Ruta</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sonidosFiltrados.map(s => (
+                <tr key={s.id}>
+                  <td>{s.nombre}</td>
+                  <td>{s.categoria}</td>
+                  <td>{s.subcategoria || '-'}</td>
+                  <td>{s.ruta_archivo}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =============================================
+// APP PRINCIPAL (Login + Router)
+// =============================================
+function App() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [usuario, setUsuario] = useState(null);
+  const [pagina, setPagina] = useState('inicio');
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    const loginData = new FormData();
+    loginData.append('email', email);
+    loginData.append('password', password);
+    try {
+      const res = await axios.post('http://127.0.0.1:8000/api/login', loginData);
+      setUsuario(res.data);
+    } catch (err) {
+      alert("Credenciales incorrectas o servidor apagado");
+    }
+  };
+
+  // ======================
+  // PANTALLA DE LOGIN
+  // ======================
+  if (!usuario) {
+    return (
+      <div className="login-wrapper">
+        <div className="login-card">
+          <h2 className="login-title">AudioNativo Login</h2>
+          <form onSubmit={handleLogin} className="login-form">
+            <input type="email" placeholder="Correo electrónico" className="login-input"
+              onChange={e => setEmail(e.target.value)} required />
+            <input type="password" placeholder="Contraseña" className="login-input"
+              onChange={e => setPassword(e.target.value)} required />
+            <button type="submit" className="login-btn">Entrar</button>
+          </form>
+        </div>
+      </div>
     );
+  }
+
+  // ======================
+  // ADMINISTRADOR
+  // ======================
+  if (usuario.rol === 'admin') {
+    return <PanelAdministracion setUsuario={setUsuario} />;
+  }
+
+  // ======================
+  // USUARIO NORMAL (PREMIUM / INSTITUTIONAL)
+  // ======================
+  return (
+    <div style={{ display: 'flex' }}>
+      <Sidebar setPagina={setPagina} paginaActiva={pagina} setUsuario={setUsuario} />
+      <div className="main-content">
+        {pagina === 'inicio' && <Inicio />}
+        {pagina === 'sonidos' && <Sonidos />}
+        {pagina === 'acerca' && <AcercaDe />}
+      </div>
+    </div>
+  );
 }
 
 export default App;
