@@ -1,5 +1,7 @@
 [build]
 builder = "NIXPACKS"
+# Aquí obligamos a Nixpacks a instalar Node.js en el servidor
+providers = ["node"]
 buildCommand = "cd frontend && npm install && npm run build"
 
 [deploy]
