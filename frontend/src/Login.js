@@ -8,14 +8,21 @@ function Login({ onLoginSuccess }) {
   const manejarLogin = async (e) => {
     e.preventDefault();
     try {
-      const respuesta = await axios.post('http://127.0.0.1:8000/api/login', {
+      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
+      
+      const respuesta = await axios.post(`${API_BASE_URL}/api/login`, {
         email: email,
         password: password
       });
+      
       alert(`¡Bienvenido ${respuesta.data.nombre}! Entraste como ${respuesta.data.rol}`);
       onLoginSuccess(respuesta.data);
     } catch (error) {
-      alert("Error: Usuario no encontrado en la base de datos");
+      if (error.response) {
+        alert("Error: Contraseña incorrecta o usuario no encontrado.");
+      } else {
+        alert("Error: No se pudo conectar con el servidor. Verifica si el backend está encendido.");
+      }
     }
   };
 
